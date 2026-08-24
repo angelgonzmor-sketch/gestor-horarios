@@ -24,6 +24,7 @@ header span { font-size: 14px; font-weight: 400; color: #a0a0b8; }
 .btn-del-horario { background: rgba(255,255,255,0.12); color: #a0a0b8; border: none; width: 28px; height: 28px; border-radius: 6px; font-size: 13px; font-weight: 700; line-height: 1; cursor: pointer; transition: all .15s; }
 .btn-del-horario:hover:not(:disabled) { background: #e74c3c; color: #fff; }
 .btn-del-horario:disabled { opacity: .35; cursor: not-allowed; }
+#sync-status { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.55); white-space: nowrap; }
 main { display: flex; flex: 1; overflow: hidden; }
 
 #panel-izq { width: 340px; min-width: 340px; background: #fff; border-right: 1px solid #dcdde1; display: flex; flex-direction: column; flex-shrink: 0; }
@@ -154,6 +155,7 @@ main { display: flex; flex: 1; overflow: hidden; }
 <div id="app">
   <header>📚 Gestor de Horarios <span>Seleccioná tus materias y armá tu horario</span>
     <div id="controles">
+      <span id="sync-status"></span>
       <div id="selector-horario">
         <select id="horario-select" title="Horario actual" onchange="cambiarHorario(this.value)"></select>
         <button class="btn-nuevo-horario" title="Crear nuevo horario" onclick="nuevoHorario()">＋</button>
@@ -724,11 +726,78 @@ function cargarSesiones() {
   descartados = estadoSesiones[sesionActual].horarios[horarioActualId].descartados;
 }
 
-function persistirSesiones() {
+function guardarLocal() {
   if (!estadoSesiones[sesionActual].horarios) estadoSesiones[sesionActual].horarios = {};
   estadoSesiones[sesionActual].horarioActualId = horarioActualId;
   estadoSesiones[sesionActual].horarios[horarioActualId] = { activas: activas, descartados: descartados };
   try { localStorage.setItem("gh-sesiones", JSON.stringify(estadoSesiones)); } catch(e) {}
+}
+
+function persistirSesiones() {
+  guardarLocal();
+  programarPush(false);
+}
+
+const SYNC_URL = "https://mantledb.sh/v2/horarios-sync-a7x4k9m2/estado";
+const SYNC_DELAY_MS = 1200;
+let syncTs = parseInt(localStorage.getItem("gh-sync-ts") || "0", 10) || 0;
+let pushTimer = null, reintentos = 0, cambiosPendientes = false;
+
+function setSyncStatus(txt) {
+  const el = document.getElementById("sync-status");
+  if (el) el.textContent = txt;
+}
+
+function programarPush(inmediato) {
+  cambiosPendientes = true;
+  clearTimeout(pushTimer);
+  setSyncStatus("⇅ Subiendo…");
+  pushTimer = setTimeout(subirEstado, inmediato ? 200 : SYNC_DELAY_MS);
+}
+
+async function subirEstado() {
+  if (!navigator.onLine) { setSyncStatus("⚠ Sin conexión"); return; }
+  try {
+    const guardadoEn = Date.now();
+    const r = await fetch(SYNC_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guardadoEn: guardadoEn, estadoSesiones: estadoSesiones }) });
+    if (!r.ok) throw new Error(r.status);
+    syncTs = guardadoEn;
+    reintentos = 0;
+    cambiosPendientes = false;
+    try { localStorage.setItem("gh-sync-ts", String(syncTs)); } catch(e) {}
+    setSyncStatus("✓ Sincronizado");
+  } catch (e) {
+    reintentos++;
+    setSyncStatus("⚠ Sin conexión");
+    if (reintentos <= 3) pushTimer = setTimeout(() => programarPush(true), 8000);
+  }
+}
+
+async function iniciarSincronizacion() {
+  if (!navigator.onLine) { setSyncStatus("⚠ Sin conexión"); return; }
+  try {
+    const r = await fetch(SYNC_URL, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const remoto = await r.json();
+    const tsRemoto = (remoto && remoto.guardadoEn) || 0;
+    if (tsRemoto > syncTs && remoto.estadoSesiones) {
+      estadoSesiones = remoto.estadoSesiones;
+      try { localStorage.setItem("gh-sesiones", JSON.stringify(estadoSesiones)); } catch(e) {}
+      syncTs = tsRemoto;
+      cambiosPendientes = false;
+      try { localStorage.setItem("gh-sync-ts", String(syncTs)); } catch(e) {}
+      cargarSesiones();
+      renderTodo();
+      setSyncStatus("✓ Sincronizado");
+    } else if (cambiosPendientes || tsRemoto < syncTs) {
+      programarPush(true);
+    } else {
+      setSyncStatus("✓ Sincronizado");
+    }
+  } catch (e) {
+    if (syncTs === 0 && !localStorage.getItem("gh-sesiones")) return;
+    if (syncTs === 0) programarPush(true); else setSyncStatus("");
+  }
 }
 
 function cambiarSesion(id) {
@@ -1131,7 +1200,13 @@ function renderTodo() {
 
 cargarSesiones();
 renderTodo();
-window.addEventListener("beforeunload", persistirSesiones);
+window.addEventListener("beforeunload", () => {
+  guardarLocal();
+  if (cambiosPendientes) {
+    try { fetch(SYNC_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guardadoEn: Date.now(), estadoSesiones: estadoSesiones }), keepalive: true }); } catch(e) {}
+  }
+});
+iniciarSincronizacion();
 </script>
 </body>
 </html>
