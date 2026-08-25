@@ -26,6 +26,13 @@ header span { font-size: 14px; font-weight: 400; color: #a0a0b8; }
 .btn-del-horario:disabled { opacity: .35; cursor: not-allowed; }
 #sync-status { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.55); white-space: nowrap; }
 #vista-movil { display: none; }
+#btn-completo { background: #f0f2f5; border: 1px solid #dcdde1; color: #1a1a2e; width: 28px; height: 28px; border-radius: 6px; font-size: 15px; line-height: 1; cursor: pointer; transition: all .15s; flex-shrink: 0; }
+#btn-completo:hover { background: #1a1a2e; color: #fff; }
+#btn-cerrar-completo { display: none; position: fixed; top: 10px; right: 10px; z-index: 600; width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(26,26,46,.85); color: #fff; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+body.horario-completo #btn-cerrar-completo { display: block; }
+body.horario-completo header, body.horario-completo #vista-movil, body.horario-completo #panel-izq, body.horario-completo #panel-der .panel-header, body.horario-completo #activas-panel { display: none !important; }
+body.horario-completo #panel-der { position: fixed; inset: 0; z-index: 500; background: #fff; }
+body.horario-completo #grid-container { min-width: 0; width: 100%; }
 main { display: flex; flex: 1; overflow: hidden; }
 
 #panel-izq { width: 340px; min-width: 340px; background: #fff; border-right: 1px solid #dcdde1; display: flex; flex-direction: column; flex-shrink: 0; }
@@ -194,7 +201,10 @@ main { display: flex; flex: 1; overflow: hidden; }
     <div id="panel-der">
       <div class="panel-header">
         <h2>Mi Horario</h2>
-        <div class="stats" id="stats-header">0 materias activas</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="stats" id="stats-header">0 materias activas</div>
+          <button id="btn-completo" title="Ver en pantalla completa" onclick="toggleHorarioCompleto()">⛶</button>
+        </div>
       </div>
       <div id="grid-wrapper">
         <div id="grid-container"></div>
@@ -208,6 +218,7 @@ main { display: flex; flex: 1; overflow: hidden; }
       </div>
     </div>
   </main>
+  <button id="btn-cerrar-completo" title="Salir de pantalla completa (Esc)" onclick="toggleHorarioCompleto()">✕</button>
 </div>
 
 <script>
@@ -1224,6 +1235,27 @@ function ajustarLetraBloques() {
     }
   }
 }
+
+function toggleHorarioCompleto() {
+  const activo = document.body.classList.toggle("horario-completo");
+  try {
+    if (activo && document.documentElement.requestFullscreen) {
+      const p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } else if (!activo && document.fullscreenElement && document.exitFullscreen) {
+      const p = document.exitFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    }
+  } catch(e) {}
+  setTimeout(ajustarLetraBloques, 60);
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("horario-completo")) toggleHorarioCompleto(); });
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && document.body.classList.contains("horario-completo")) {
+    document.body.classList.remove("horario-completo");
+    setTimeout(ajustarLetraBloques, 60);
+  }
+});
 
 let vistaMovil = "horario";
 try { if (localStorage.getItem("gh-vista") === "materias") vistaMovil = "materias"; } catch(e) {}
