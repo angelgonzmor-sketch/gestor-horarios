@@ -151,9 +151,9 @@ main { display: flex; flex: 1; overflow: hidden; }
   #activas-panel { max-height: 110px; }
   #grid-container { grid-template-columns: 30px repeat(6, minmax(64px, 1fr)); min-width: 424px; }
   #grid-container .time-label { font-size: 9px; }
-  .bloque-materia { font-size: 11px; padding: 1px 2px; }
-  .bloque-materia .bm-materia { font-size: 12px; }
-  .bloque-materia .bm-grupo { font-size: 10px; }
+  .bloque-materia { font-size: 12px; padding: 1px 2px; }
+  .bloque-materia .bm-materia { font-size: 1em; }
+  .bloque-materia .bm-grupo { font-size: 0.85em; }
   .bloque-materia .bm-profesor, .bloque-materia .bm-horario { display: none; }
   .toast { left: 16px; right: 16px; bottom: 16px; text-align: center; }
 }
@@ -1156,6 +1156,7 @@ function renderGrid() {
       grid.appendChild(bloque);
     }
   }
+  ajustarLetraBloques();
 }
 
 function renderActivas() {
@@ -1210,12 +1211,27 @@ function renderTodo() {
   renderStats();
 }
 
+function ajustarLetraBloques() {
+  if (window.innerWidth > 820) return;
+  const bloques = document.querySelectorAll("#grid-container .bloque-materia");
+  for (const b of bloques) {
+    b.style.fontSize = "";
+    if (!b.clientWidth || !b.clientHeight) continue;
+    let px = 12;
+    while (px > 7 && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1)) {
+      px -= 0.5;
+      b.style.fontSize = px + "px";
+    }
+  }
+}
+
 let vistaMovil = "horario";
 try { if (localStorage.getItem("gh-vista") === "materias") vistaMovil = "materias"; } catch(e) {}
 function cambiarVistaMovil(v) {
   vistaMovil = v === "materias" ? "materias" : "horario";
   try { localStorage.setItem("gh-vista", vistaMovil); } catch(e) {}
   aplicarVistaMovil();
+  if (vistaMovil === "horario") setTimeout(ajustarLetraBloques, 0);
 }
 function aplicarVistaMovil() {
   const horario = vistaMovil === "horario";
@@ -1227,6 +1243,10 @@ function aplicarVistaMovil() {
   if (tm) tm.classList.toggle("activo", !horario);
 }
 aplicarVistaMovil();
+
+let rzTimer = null;
+window.addEventListener("resize", () => { clearTimeout(rzTimer); rzTimer = setTimeout(ajustarLetraBloques, 150); });
+window.addEventListener("orientationchange", () => { clearTimeout(rzTimer); rzTimer = setTimeout(ajustarLetraBloques, 250); });
 
 cargarSesiones();
 renderTodo();
