@@ -25,6 +25,7 @@ header span { font-size: 14px; font-weight: 400; color: #a0a0b8; }
 .btn-del-horario:hover:not(:disabled) { background: #e74c3c; color: #fff; }
 .btn-del-horario:disabled { opacity: .35; cursor: not-allowed; }
 #sync-status { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.55); white-space: nowrap; }
+#vista-movil { display: none; }
 main { display: flex; flex: 1; overflow: hidden; }
 
 #panel-izq { width: 340px; min-width: 340px; background: #fff; border-right: 1px solid #dcdde1; display: flex; flex-direction: column; flex-shrink: 0; }
@@ -140,13 +141,20 @@ main { display: flex; flex: 1; overflow: hidden; }
   .btn-sesion { padding: 5px 9px; font-size: 11px; }
   #horario-select { padding: 5px 6px; font-size: 11px; max-width: 110px; }
   main { flex-direction: column; }
-  #panel-izq { width: 100%; min-width: 0; max-height: 45vh; border-right: none; border-bottom: 1px solid #dcdde1; }
-  #activas-panel { max-height: 130px; }
-  .bloque-materia { font-size: 13px; padding: 1px 2px; }
-  .bloque-materia .bm-materia { font-size: 14px; }
-  .bloque-materia .bm-grupo { font-size: 12px; }
-  .bloque-materia .bm-profesor { font-size: 10px; }
-  .bloque-materia .bm-horario { font-size: 10px; }
+  #vista-movil { display: flex; gap: 6px; padding: 8px 12px 0; flex-shrink: 0; }
+  .tab-movil { flex: 1; padding: 9px 0; border: none; border-radius: 8px; background: #e4e6eb; color: #555; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .tab-movil.activo { background: #1a1a2e; color: #fff; }
+  body.ver-horario #panel-izq { display: none; }
+  body.ver-horario #panel-der { flex: 1; }
+  body.ver-materias #panel-der { display: none; }
+  #panel-izq { width: 100%; min-width: 0; max-height: none; flex: 1; border-right: none; border-bottom: none; }
+  #activas-panel { max-height: 110px; }
+  #grid-container { grid-template-columns: 30px repeat(6, minmax(64px, 1fr)); min-width: 424px; }
+  #grid-container .time-label { font-size: 9px; }
+  .bloque-materia { font-size: 11px; padding: 1px 2px; }
+  .bloque-materia .bm-materia { font-size: 12px; }
+  .bloque-materia .bm-grupo { font-size: 10px; }
+  .bloque-materia .bm-profesor, .bloque-materia .bm-horario { display: none; }
   .toast { left: 16px; right: 16px; bottom: 16px; text-align: center; }
 }
 </style>
@@ -168,6 +176,10 @@ main { display: flex; flex: 1; overflow: hidden; }
       </div>
     </div>
   </header>
+  <div id="vista-movil">
+    <button id="tab-horario" class="tab-movil activo" onclick="cambiarVistaMovil('horario')">📅 Horario</button>
+    <button id="tab-materias" class="tab-movil" onclick="cambiarVistaMovil('materias')">📋 Materias</button>
+  </div>
   <main>
     <aside id="panel-izq">
       <div class="panel-header">
@@ -1197,6 +1209,24 @@ function renderTodo() {
   renderActivas();
   renderStats();
 }
+
+let vistaMovil = "horario";
+try { if (localStorage.getItem("gh-vista") === "materias") vistaMovil = "materias"; } catch(e) {}
+function cambiarVistaMovil(v) {
+  vistaMovil = v === "materias" ? "materias" : "horario";
+  try { localStorage.setItem("gh-vista", vistaMovil); } catch(e) {}
+  aplicarVistaMovil();
+}
+function aplicarVistaMovil() {
+  const horario = vistaMovil === "horario";
+  document.body.classList.toggle("ver-horario", horario);
+  document.body.classList.toggle("ver-materias", !horario);
+  const th = document.getElementById("tab-horario");
+  const tm = document.getElementById("tab-materias");
+  if (th) th.classList.toggle("activo", horario);
+  if (tm) tm.classList.toggle("activo", !horario);
+}
+aplicarVistaMovil();
 
 cargarSesiones();
 renderTodo();
