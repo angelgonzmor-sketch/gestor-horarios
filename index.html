@@ -30,6 +30,13 @@ header span { font-size: 14px; font-weight: 400; color: #a0a0b8; }
 #btn-completo:hover { background: #1a1a2e; color: #fff; }
 #btn-cerrar-completo { display: none; position: fixed; top: 10px; right: 10px; z-index: 600; width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(26,26,46,.85); color: #fff; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
 body.horario-completo #btn-cerrar-completo { display: block; }
+#btn-descargar:hover { background: #1a1a2e; color: #fff; }
+.dropdown-menu button:hover { background: #f0f2f5; }
+body.horario-completo #btn-descargar { display: none; }
+.dropdown-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 1px solid #dcdde1; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 100; min-width: 160px; }
+.dropdown-menu.show { display: block; }
+.dropdown-menu button { width: 100%; padding: 10px 12px; text-align: left; border: none; background: none; font-size: 13px; color: #1a1a2e; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.dropdown-menu button:hover { background: #f0f2f5; }
 body.horario-completo header, body.horario-completo #vista-movil, body.horario-completo #panel-izq, body.horario-completo #panel-der .panel-header, body.horario-completo #activas-panel { display: none !important; }
 body.horario-completo #panel-der { position: fixed; inset: 0; z-index: 500; background: #fff; }
 body.horario-completo #grid-container { min-width: 0; width: 100%; }
@@ -203,7 +210,16 @@ main { display: flex; flex: 1; overflow: hidden; }
         <h2>Mi Horario</h2>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="stats" id="stats-header">0 materias activas</div>
-          <button id="btn-completo" title="Ver en pantalla completa" onclick="toggleHorarioCompleto()">⛶</button>
+          <div class="dropdown" style="position:relative;">
+            <button id="btn-completo" title="Ver en pantalla completa" onclick="toggleHorarioCompleto()">⛶</button>
+            <div class="dropdown" style="position:relative;">
+              <button id="btn-descargar" title="Descargar horario" onclick="toggleDescargaMenu()" style="background:#f0f2f5;border:1px solid #dcdde1;color:#1a1a2e;width:28px;height:28px;border-radius:6px;font-size:15px;line-height:1;cursor:pointer;transition:all .15s;flex-shrink:0;">📥</button>
+              <div id="menu-descarga" class="dropdown-menu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid #dcdde1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:160px;">
+                <button onclick="descargarHorario('png')" style="width:100%;padding:10px 12px;text-align:left;border:none;background:none;font-size:13px;color:#1a1a2e;cursor:pointer;display:flex;align-items:center;gap:8px;">📷 Imagen (PNG)</button>
+                <button onclick="descargarHorario('pdf')" style="width:100%;padding:10px 12px;text-align:left;border:none;background:none;font-size:13px;color:#1a1a2e;cursor:pointer;display:flex;align-items:center;gap:8px;">📄 PDF (A4 horizontal)</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="grid-wrapper">
@@ -1248,6 +1264,105 @@ function toggleHorarioCompleto() {
     }
   } catch(e) {}
   setTimeout(ajustarLetraBloques, 60);
+}
+
+let html2canvasPromise = null;
+let jsPDFPromise = null;
+function loadLibs() {
+  if (!html2canvasPromise) {
+    html2canvasPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+      s.onload = () => resolve(window.html2canvas);
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  if (!jsPDFPromise) {
+    jsPDFPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
+      s.onload = () => resolve(window.jspdf);
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  return Promise.all([html2canvasPromise, jsPDFPromise]);
+}
+
+function toggleDescargaMenu() {
+  const menu = document.getElementById("menu-descarga");
+  menu.classList.toggle("show");
+  if (menu.classList.contains("show")) {
+    setTimeout(() => document.addEventListener("click", cerrarMenuDescargaFuera), 0);
+  } else {
+    document.removeEventListener("click", cerrarMenuDescargaFuera);
+  }
+}
+
+function cerrarMenuDescargaFuera(e) {
+  if (!e.target.closest("#btn-descargar") && !e.target.closest("#menu-descarga")) {
+    document.getElementById("menu-descarga").classList.remove("show");
+    document.removeEventListener("click", cerrarMenuDescargaFuera);
+  }
+}
+
+async function descargarHorario(tipo) {
+  document.getElementById("menu-descarga").classList.remove("show");
+  const toast = mostrarToast("Generando descarga...", "info");
+  try {
+    await loadLibs();
+    const html2canvas = window.html2canvas;
+    const { jsPDF } = window.jspdf;
+    const enCompleto = document.body.classList.contains("horario-completo");
+    const target = enCompleto ? document.getElementById("panel-der") : document.getElementById("grid-container");
+    if (!target) throw new Error("No se encontró el elemento a capturar");
+    const scale = 2;
+    const canvas = await html2canvas(target, {
+      scale,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#fff",
+      width: target.scrollWidth,
+      height: target.scrollHeight,
+      windowWidth: target.scrollWidth,
+      windowHeight: target.scrollHeight,
+      onclone: (clonedDoc) => {
+        const cloned = clonedDoc.getElementById(enCompleto ? "panel-der" : "grid-container");
+        if (cloned) {
+          cloned.style.width = cloned.scrollWidth + "px";
+          cloned.style.height = cloned.scrollHeight + "px";
+          cloned.style.overflow = "visible";
+        }
+      }
+    });
+    if (tipo === "png") {
+      const link = document.createElement("a");
+      link.download = `horario-${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast.textContent = "Imagen descargada";
+      toast.className = "toast info";
+    } else {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+      const x = (pdfWidth - finalWidth) / 2;
+      const y = (pdfHeight - finalHeight) / 2;
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", x, y, finalWidth, finalHeight);
+      pdf.save(`horario-${new Date().toISOString().slice(0,10)}.pdf`);
+      toast.textContent = "PDF descargado";
+      toast.className = "toast info";
+    }
+  } catch (e) {
+    toast.textContent = "Error al descargar: " + e.message;
+    toast.className = "toast error";
+  }
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("horario-completo")) toggleHorarioCompleto(); });
 document.addEventListener("fullscreenchange", () => {
